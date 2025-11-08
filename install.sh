@@ -275,28 +275,67 @@ get_recommended_swap() {
     fi
 }
 
-# Calculate optimal swappiness based on RAM
+# Get current swap size in MB
+get_current_swap_mb() {
+    # Get swap size from /proc/swaps (more reliable than checking file)
+    local swap_kb=$(grep -v "Filename" /proc/swaps 2>/dev/null | awk '{sum+=$3} END {print sum}')
+
+    if [ -z "$swap_kb" ] || [ "$swap_kb" = "0" ]; then
+        echo 0
+    else
+        local swap_mb=$((swap_kb / 1024))
+        echo $swap_mb
+    fi
+}
+
+# Calculate optimal swappiness based on RAM and swap size (Solution C)
 get_recommended_swappiness() {
     local ram_mb=$(get_ram_mb)
+    local swap_mb=$(get_current_swap_mb)
     local swappiness=10
 
-    # Optimal swappiness for VPS based on RAM:
-    # RAM < 1GB: 60 (default, needs more swap usage)
-    # RAM 1-2GB: 40 (moderate swap usage)
-    # RAM 2-4GB: 20 (reduced swap usage)
-    # RAM 4-8GB: 10 (minimal swap usage)
-    # RAM > 8GB: 5 (very minimal swap usage)
+    # Simplified practical recommendation (Solution C):
+    # Two-dimensional decision: RAM size × Swap adequacy
+    #
+    # Swap adequacy definition:
+    # - RAM < 2GB: Swap ≥ 1GB is adequate
+    # - RAM ≥ 2GB: Swap ≥ 2GB is adequate
+    #
+    # Decision matrix:
+    # RAM       │ Swap Adequate │ Swap Insufficient
+    # ──────────┼───────────────┼──────────────────
+    # < 1GB     │      30       │       50
+    # 1-2GB     │      20       │       30
+    # 2-4GB     │      10       │       20
+    # 4-8GB     │      5        │       10
+    # > 8GB     │      1        │       5
 
-    if [ $ram_mb -lt 1024 ]; then
-        swappiness=60
-    elif [ $ram_mb -lt 2048 ]; then
-        swappiness=40
-    elif [ $ram_mb -lt 4096 ]; then
-        swappiness=20
-    elif [ $ram_mb -lt 8192 ]; then
-        swappiness=10
+    # Determine if swap is adequate based on RAM size
+    local swap_adequate=0
+    if [ $ram_mb -lt 2048 ]; then
+        # For RAM < 2GB: adequate if swap ≥ 1GB
+        [ $swap_mb -ge 1024 ] && swap_adequate=1
     else
-        swappiness=5
+        # For RAM ≥ 2GB: adequate if swap ≥ 2GB
+        [ $swap_mb -ge 2048 ] && swap_adequate=1
+    fi
+
+    # Calculate swappiness based on RAM and swap adequacy
+    if [ $ram_mb -lt 1024 ]; then
+        # RAM < 1GB
+        [ $swap_adequate -eq 1 ] && swappiness=30 || swappiness=50
+    elif [ $ram_mb -lt 2048 ]; then
+        # RAM 1-2GB
+        [ $swap_adequate -eq 1 ] && swappiness=20 || swappiness=30
+    elif [ $ram_mb -lt 4096 ]; then
+        # RAM 2-4GB
+        [ $swap_adequate -eq 1 ] && swappiness=10 || swappiness=20
+    elif [ $ram_mb -lt 8192 ]; then
+        # RAM 4-8GB
+        [ $swap_adequate -eq 1 ] && swappiness=5 || swappiness=10
+    else
+        # RAM > 8GB
+        [ $swap_adequate -eq 1 ] && swappiness=1 || swappiness=5
     fi
 
     echo $swappiness
