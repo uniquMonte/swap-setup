@@ -471,6 +471,7 @@ show_menu() {
     echo "5) Refresh Status"
     echo "0) Exit"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
 }
 
 main() {
@@ -514,7 +515,10 @@ main() {
     # Interactive menu
     while true; do
         show_menu
-        read -p "Enter your choice [0-5]: " choice
+        read -p "Enter your choice [0-5] (or press Enter to exit): " choice
+
+        # Default to 0 (Exit) if user presses Enter without input
+        choice=${choice:-0}
 
         case $choice in
             1)
