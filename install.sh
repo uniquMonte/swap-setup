@@ -542,6 +542,158 @@ remove_swap() {
     get_swap_info
 }
 
+# Modify swap size
+modify_swap() {
+    # Check if swap exists
+    if [ ! -f "$SWAP_FILE" ]; then
+        print_error "No swap file found at $SWAP_FILE"
+        print_info "Please use option 1 to create a swap file first"
+        return 1
+    fi
+
+    # Get current swap size
+    local current_swap_size=$(ls -lh $SWAP_FILE | awk '{print $5}')
+    local current_swap_mb=$(get_current_swap_mb)
+
+    # Get system information
+    local ram_mb=$(get_ram_mb)
+    local available_gb=$(check_disk_space)
+    local recommended=$(get_recommended_swap)
+
+    # Format RAM display
+    local ram_display
+    if [ $ram_mb -lt 1024 ]; then
+        ram_display="${ram_mb} MB"
+    else
+        local ram_gb=$(echo "scale=1; $ram_mb / 1024" | bc)
+        ram_display="${ram_gb} GB"
+    fi
+
+    echo ""
+    echo -e "${BLUE}Current Swap Information:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "Current Size:    ${YELLOW}${current_swap_size}${NC} (${current_swap_mb} MB)"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo -e "${BLUE}System Information:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "RAM:             ${ram_display}"
+    echo -e "Available Disk:  ${available_gb} GB"
+    echo -e "Recommended:     ${GREEN}${recommended}${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo -e "${BLUE}Enter new swap size (or press Enter for recommended ${recommended}):${NC}"
+    echo "Examples: 1G, 2G, 512M"
+    echo "Enter 0 to cancel"
+    echo ""
+
+    read -p "New swap size [${recommended}]: " new_swap_size
+
+    # If empty, use recommended
+    if [ -z "$new_swap_size" ]; then
+        new_swap_size=$recommended
+        print_success "Using recommended size: $new_swap_size"
+    elif [ "$new_swap_size" = "0" ]; then
+        print_info "Operation cancelled"
+        return 0
+    else
+        # Validate custom size
+        if [[ ! $new_swap_size =~ ^[0-9]+[MG]$ ]]; then
+            print_error "Invalid format. Please use format like: 512M or 2G"
+            return 1
+        fi
+    fi
+
+    # Convert new size to MB for comparison
+    local new_swap_mb
+    if [[ $new_swap_size =~ ^([0-9]+)G$ ]]; then
+        new_swap_mb=$((${BASH_REMATCH[1]} * 1024))
+    else
+        new_swap_mb=$(echo $new_swap_size | sed 's/M//')
+    fi
+
+    # Check if size is the same
+    if [ $new_swap_mb -eq $current_swap_mb ]; then
+        print_warning "New size is the same as current size. No changes needed."
+        return 0
+    fi
+
+    # Confirm the modification
+    echo ""
+    print_warning "This will modify the swap size from ${current_swap_size} to ${new_swap_size}"
+    read -p "Do you want to continue? (y/n): " confirm
+
+    if [[ $confirm != "y" && $confirm != "Y" ]]; then
+        print_info "Operation cancelled"
+        return 0
+    fi
+
+    echo ""
+    print_info "Step 1/5: Disabling current swap..."
+    swapoff $SWAP_FILE 2>/dev/null
+
+    print_info "Step 2/5: Removing old swap file..."
+    rm -f $SWAP_FILE
+
+    print_info "Step 3/5: Creating new ${new_swap_size} swap file..."
+    if ! dd if=/dev/zero of=$SWAP_FILE bs=1M count=$(echo $new_swap_size | sed 's/G/*1024/' | sed 's/M//' | bc) status=progress 2>/dev/null; then
+        print_error "Failed to create new swap file"
+        return 1
+    fi
+
+    # Set proper permissions
+    chmod 600 $SWAP_FILE
+
+    print_info "Step 4/5: Setting up swap space..."
+    if ! mkswap $SWAP_FILE > /dev/null 2>&1; then
+        print_error "Failed to set up swap space"
+        rm -f $SWAP_FILE
+        return 1
+    fi
+
+    print_info "Step 5/5: Enabling new swap..."
+    if ! swapon $SWAP_FILE; then
+        print_error "Failed to enable swap"
+        rm -f $SWAP_FILE
+        return 1
+    fi
+
+    # Make sure it's in fstab (should already be there, but just in case)
+    if ! grep -q "$SWAP_FILE" /etc/fstab; then
+        echo "$SWAP_FILE none swap sw 0 0" >> /etc/fstab
+    fi
+
+    # Update swap optimization settings based on new size
+    print_info "Optimizing swap settings for new size..."
+
+    local swappiness=$(get_recommended_swappiness)
+    local cache_pressure=$(get_recommended_cache_pressure)
+
+    # Update swappiness
+    if ! grep -q "vm.swappiness" /etc/sysctl.conf; then
+        echo "vm.swappiness=$swappiness" >> /etc/sysctl.conf
+    else
+        sed -i "s/vm.swappiness=.*/vm.swappiness=$swappiness/" /etc/sysctl.conf
+    fi
+
+    # Update cache pressure
+    if ! grep -q "vm.vfs_cache_pressure" /etc/sysctl.conf; then
+        echo "vm.vfs_cache_pressure=$cache_pressure" >> /etc/sysctl.conf
+    else
+        sed -i "s/vm.vfs_cache_pressure=.*/vm.vfs_cache_pressure=$cache_pressure/" /etc/sysctl.conf
+    fi
+
+    # Apply settings
+    sysctl -p > /dev/null 2>&1
+
+    print_info "Swappiness set to $swappiness, Cache pressure set to $cache_pressure"
+
+    echo ""
+    print_success "Swap size modified successfully from ${current_swap_size} to ${new_swap_size}!"
+    echo ""
+    get_swap_info
+}
+
 # Install script to system
 install_script() {
     if [ -f "$SCRIPT_INSTALL_PATH" ]; then
@@ -642,10 +794,11 @@ show_menu() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "1) Add/Create Swap"
     echo "2) Remove Swap"
-    echo "3) View Detailed Configuration"
-    echo "4) Update Script"
-    echo "5) Uninstall Script"
-    echo "6) Refresh Status"
+    echo "3) Modify Swap Size"
+    echo "4) View Detailed Configuration"
+    echo "5) Update Script"
+    echo "6) Uninstall Script"
+    echo "7) Refresh Status"
     echo "0) Exit"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
@@ -673,6 +826,10 @@ main() {
                 remove_swap
                 exit 0
                 ;;
+            modify)
+                modify_swap
+                exit 0
+                ;;
             status)
                 print_banner
                 get_swap_info
@@ -687,7 +844,7 @@ main() {
                 exit 0
                 ;;
             *)
-                echo "Usage: $0 {install|uninstall|add|remove|status|config|update}"
+                echo "Usage: $0 {install|uninstall|add|remove|modify|status|config|update}"
                 exit 1
                 ;;
         esac
@@ -696,7 +853,7 @@ main() {
     # Interactive menu
     while true; do
         show_menu
-        read -p "Enter your choice [0-6] (or press Enter to exit): " choice
+        read -p "Enter your choice [0-7] (or press Enter to exit): " choice
 
         # Default to 0 (Exit) if user presses Enter without input
         choice=${choice:-0}
@@ -711,18 +868,22 @@ main() {
                 read -p "Press Enter to continue..."
                 ;;
             3)
-                show_swap_config
+                modify_swap
                 read -p "Press Enter to continue..."
                 ;;
             4)
-                update_script
+                show_swap_config
+                read -p "Press Enter to continue..."
                 ;;
             5)
+                update_script
+                ;;
+            6)
                 uninstall_script
                 read -p "Press Enter to continue..."
                 exit 0
                 ;;
-            6)
+            7)
                 continue
                 ;;
             0)
