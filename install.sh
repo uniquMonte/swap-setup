@@ -137,25 +137,36 @@ show_swap_config() {
     local current_swappiness=$(cat /proc/sys/vm/swappiness 2>/dev/null || echo "N/A")
     local recommended_swappiness=$(get_recommended_swappiness)
 
+    echo -e "${BLUE}Swappiness:${NC}"
     if [ "$current_swappiness" = "$recommended_swappiness" ]; then
-        echo -e "Swappiness:      ${GREEN}$current_swappiness${NC} (optimal)"
+        echo -e "  Value:         ${GREEN}$current_swappiness${NC} (optimal)"
     elif [ "$current_swappiness" = "N/A" ]; then
-        echo -e "Swappiness:      ${YELLOW}Not set${NC} (recommended: $recommended_swappiness)"
+        echo -e "  Value:         ${YELLOW}Not set${NC} (recommended: $recommended_swappiness)"
     else
-        echo -e "Swappiness:      $current_swappiness (recommended: ${GREEN}$recommended_swappiness${NC})"
+        echo -e "  Value:         $current_swappiness (recommended: ${GREEN}$recommended_swappiness${NC})"
     fi
+    echo -e "  Description:   Controls swap usage tendency (0-100)"
+    echo -e "                 Lower = prefer RAM, Higher = use swap more often"
+    echo -e "  Common values: 1 (min swap), 10 (desktop), 20-30 (VPS),"
+    echo -e "                 60 (default), 100 (max swap)"
+    echo ""
 
     # Get current cache pressure
     local cache_pressure=$(cat /proc/sys/vm/vfs_cache_pressure 2>/dev/null || echo "N/A")
     local recommended_cache_pressure=$(get_recommended_cache_pressure)
 
+    echo -e "${BLUE}Cache Pressure:${NC}"
     if [ "$cache_pressure" = "$recommended_cache_pressure" ]; then
-        echo -e "Cache Pressure:  ${GREEN}$cache_pressure${NC} (optimal)"
+        echo -e "  Value:         ${GREEN}$cache_pressure${NC} (optimal)"
     elif [ "$cache_pressure" = "N/A" ]; then
-        echo -e "Cache Pressure:  ${YELLOW}Not set${NC} (recommended: $recommended_cache_pressure)"
+        echo -e "  Value:         ${YELLOW}Not set${NC} (recommended: $recommended_cache_pressure)"
     else
-        echo -e "Cache Pressure:  $cache_pressure (recommended: ${GREEN}$recommended_cache_pressure${NC})"
+        echo -e "  Value:         $cache_pressure (recommended: ${GREEN}$recommended_cache_pressure${NC})"
     fi
+    echo -e "  Description:   Controls cache reclaim aggressiveness"
+    echo -e "                 Lower = retain cache, Higher = free up memory"
+    echo -e "  Common values: 25 (retain most), 50 (balanced), 75 (moderate),"
+    echo -e "                 100 (default), 150+ (aggressive reclaim)"
 
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
@@ -572,7 +583,8 @@ modify_swap() {
     echo ""
     echo -e "${BLUE}Current Swap Information:${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "Current Size:    ${YELLOW}${current_swap_size}${NC} (${current_swap_mb} MB)"
+    echo -e "File Size:       ${YELLOW}${current_swap_size}${NC}"
+    echo -e "Usable Space:    ${YELLOW}${current_swap_mb} MB${NC} (excludes swap metadata)"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo -e "${BLUE}System Information:${NC}"
