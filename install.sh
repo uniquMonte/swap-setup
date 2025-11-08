@@ -147,12 +147,14 @@ show_swap_config() {
 
     # Get current cache pressure
     local cache_pressure=$(cat /proc/sys/vm/vfs_cache_pressure 2>/dev/null || echo "N/A")
-    if [ "$cache_pressure" = "50" ]; then
+    local recommended_cache_pressure=$(get_recommended_cache_pressure)
+
+    if [ "$cache_pressure" = "$recommended_cache_pressure" ]; then
         echo -e "Cache Pressure:  ${GREEN}$cache_pressure${NC} (optimal)"
     elif [ "$cache_pressure" = "N/A" ]; then
-        echo -e "Cache Pressure:  ${YELLOW}Not set${NC} (recommended: 50)"
+        echo -e "Cache Pressure:  ${YELLOW}Not set${NC} (recommended: $recommended_cache_pressure)"
     else
-        echo -e "Cache Pressure:  $cache_pressure (recommended: ${GREEN}50${NC})"
+        echo -e "Cache Pressure:  $cache_pressure (recommended: ${GREEN}$recommended_cache_pressure${NC})"
     fi
 
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -164,7 +166,7 @@ show_swap_config() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo -e "Swap Size:       ${GREEN}$recommended_swap${NC}"
     echo -e "Swappiness:      ${GREEN}$recommended_swappiness${NC}"
-    echo -e "Cache Pressure:  ${GREEN}50${NC}"
+    echo -e "Cache Pressure:  ${GREEN}$recommended_cache_pressure${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 }
@@ -341,6 +343,42 @@ get_recommended_swappiness() {
     echo $swappiness
 }
 
+# Calculate optimal cache pressure based on RAM (Solution D)
+get_recommended_cache_pressure() {
+    local ram_mb=$(get_ram_mb)
+    local cache_pressure=50
+
+    # RAM-based cache pressure recommendation (Solution D):
+    # Controls how aggressively the kernel reclaims inode/dentry cache
+    #
+    # Lower values = retain cache more (better for file-heavy operations)
+    # Higher values = reclaim cache more (free up memory)
+    #
+    # RAM       │ Recommended │ Reasoning
+    # ──────────┼─────────────┼──────────────────────────────────
+    # < 1GB     │    100      │ Tight memory, use default balance
+    # 1-2GB     │     75      │ Moderate retention, some pressure
+    # 2-4GB     │     50      │ Good balance for VPS workloads
+    # 4-8GB     │     50      │ Sufficient memory, retain cache
+    # > 8GB     │     25      │ Plenty of memory, keep cache hot
+
+    if [ $ram_mb -lt 1024 ]; then
+        # RAM < 1GB: Use system default (100)
+        cache_pressure=100
+    elif [ $ram_mb -lt 2048 ]; then
+        # RAM 1-2GB: Moderate cache retention
+        cache_pressure=75
+    elif [ $ram_mb -lt 8192 ]; then
+        # RAM 2-8GB: Good balance (VPS sweet spot)
+        cache_pressure=50
+    else
+        # RAM > 8GB: Aggressive cache retention
+        cache_pressure=25
+    fi
+
+    echo $cache_pressure
+}
+
 #==============================================================================
 # Swap Management Functions
 #==============================================================================
@@ -447,6 +485,9 @@ create_swap() {
     # Get optimal swappiness for this system
     local swappiness=$(get_recommended_swappiness)
 
+    # Get optimal cache pressure for this system
+    local cache_pressure=$(get_recommended_cache_pressure)
+
     # Set swappiness (how aggressively the kernel swaps)
     if ! grep -q "vm.swappiness" /etc/sysctl.conf; then
         echo "vm.swappiness=$swappiness" >> /etc/sysctl.conf
@@ -454,17 +495,17 @@ create_swap() {
         sed -i "s/vm.swappiness=.*/vm.swappiness=$swappiness/" /etc/sysctl.conf
     fi
 
-    # Set cache pressure
+    # Set cache pressure (how aggressively the kernel reclaims inode/dentry cache)
     if ! grep -q "vm.vfs_cache_pressure" /etc/sysctl.conf; then
-        echo "vm.vfs_cache_pressure=50" >> /etc/sysctl.conf
+        echo "vm.vfs_cache_pressure=$cache_pressure" >> /etc/sysctl.conf
     else
-        sed -i 's/vm.vfs_cache_pressure=.*/vm.vfs_cache_pressure=50/' /etc/sysctl.conf
+        sed -i "s/vm.vfs_cache_pressure=.*/vm.vfs_cache_pressure=$cache_pressure/" /etc/sysctl.conf
     fi
 
     # Apply settings
     sysctl -p > /dev/null 2>&1
 
-    print_info "Swappiness set to $swappiness (optimized for ${ram_display} RAM)"
+    print_info "Swappiness set to $swappiness, Cache pressure set to $cache_pressure (optimized for ${ram_display} RAM)"
 
     echo ""
     print_success "Swap space created successfully!"
