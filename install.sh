@@ -147,12 +147,14 @@ show_swap_config() {
 
     # Get current cache pressure
     local cache_pressure=$(cat /proc/sys/vm/vfs_cache_pressure 2>/dev/null || echo "N/A")
-    if [ "$cache_pressure" = "50" ]; then
+    local recommended_cache_pressure=$(get_recommended_cache_pressure)
+
+    if [ "$cache_pressure" = "$recommended_cache_pressure" ]; then
         echo -e "Cache Pressure:  ${GREEN}$cache_pressure${NC} (optimal)"
     elif [ "$cache_pressure" = "N/A" ]; then
-        echo -e "Cache Pressure:  ${YELLOW}Not set${NC} (recommended: 50)"
+        echo -e "Cache Pressure:  ${YELLOW}Not set${NC} (recommended: $recommended_cache_pressure)"
     else
-        echo -e "Cache Pressure:  $cache_pressure (recommended: ${GREEN}50${NC})"
+        echo -e "Cache Pressure:  $cache_pressure (recommended: ${GREEN}$recommended_cache_pressure${NC})"
     fi
 
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -164,7 +166,7 @@ show_swap_config() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo -e "Swap Size:       ${GREEN}$recommended_swap${NC}"
     echo -e "Swappiness:      ${GREEN}$recommended_swappiness${NC}"
-    echo -e "Cache Pressure:  ${GREEN}50${NC}"
+    echo -e "Cache Pressure:  ${GREEN}$recommended_cache_pressure${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 }
@@ -181,78 +183,200 @@ get_ram_mb() {
     echo $ram_mb
 }
 
-# Calculate recommended swap size based on RAM
+# Calculate recommended swap size based on RAM and available space
 get_recommended_swap() {
     local ram_mb=$(get_ram_mb)
     local available_gb=$(check_disk_space)
     local swap_mb=0
 
-    # Conservative swap recommendation for VPS:
-    # RAM < 1GB: 1GB swap (minimum practical size)
-    # RAM 1-8GB: 2GB swap (practical size for most VPS)
-    # RAM > 8GB: 1GB swap (high RAM systems rarely need swap)
+    # Balanced and practical swap recommendation for VPS (Solution 2)
+    # Two-dimensional decision matrix: RAM size × Available disk space
+    # Typical values: 512MB, 1GB, 2GB, 3GB
 
     if [ $ram_mb -lt 1024 ]; then
-        # For systems with less than 1GB RAM: recommend 1GB
-        swap_mb=1024
+        # RAM < 1GB: Small memory needs more swap proportionally
+        if [ $available_gb -gt 10 ]; then
+            swap_mb=2048  # 2GB - generous for small RAM with plenty of space
+        elif [ $available_gb -ge 3 ]; then
+            swap_mb=1024  # 1GB - practical minimum
+        else
+            swap_mb=512   # 512MB - tight space fallback
+        fi
+
+    elif [ $ram_mb -lt 2048 ]; then
+        # RAM 1-2GB: Lightweight applications, common budget VPS
+        if [ $available_gb -gt 5 ]; then
+            swap_mb=2048  # 2GB - comfortable swap space
+        else
+            swap_mb=1024  # 1GB - space-constrained
+        fi
+
+    elif [ $ram_mb -lt 4096 ]; then
+        # RAM 2-4GB: Most common VPS configuration
+        if [ $available_gb -gt 10 ]; then
+            swap_mb=3072  # 3GB - optimal for this RAM range
+        elif [ $available_gb -ge 3 ]; then
+            swap_mb=2048  # 2GB - balanced choice
+        else
+            swap_mb=1024  # 1GB - minimal but functional
+        fi
+
     elif [ $ram_mb -le 8192 ]; then
-        # For systems with 1-8GB RAM: recommend 2GB (practical and conservative)
-        swap_mb=2048
+        # RAM 4-8GB: Sufficient memory, moderate swap needed
+        if [ $available_gb -ge 3 ]; then
+            swap_mb=2048  # 2GB - safety buffer
+        else
+            swap_mb=1024  # 1GB - minimal swap
+        fi
+
     else
-        # For systems with more than 8GB RAM: recommend 1GB (minimal swap for emergency)
-        swap_mb=1024
-    fi
-
-    # Convert MB to GB (round up)
-    local swap_gb=$(( (swap_mb + 1023) / 1024 ))
-
-    # Cap at 8GB maximum (no VPS needs more than 8GB swap)
-    if [ $swap_gb -gt 8 ]; then
-        swap_gb=8
-    fi
-
-    # Ensure minimum of 1GB
-    if [ $swap_gb -lt 1 ]; then
-        swap_gb=1
-    fi
-
-    # Check if we have enough disk space (need at least swap + 2GB free)
-    if [ $available_gb -lt $((swap_gb + 2)) ]; then
-        # Reduce swap size to fit available space
-        swap_gb=$((available_gb - 2))
-        if [ $swap_gb -lt 1 ]; then
-            swap_gb=1
+        # RAM > 8GB: Large memory, swap rarely used
+        if [ $available_gb -ge 3 ]; then
+            swap_mb=1024  # 1GB - emergency use only
+        else
+            swap_mb=512   # 512MB - absolute minimum
         fi
     fi
 
-    echo "${swap_gb}G"
+    # Safety check: ensure at least 2GB free disk space after creating swap
+    # Calculate swap size in GB for boundary checking
+    local swap_size_for_check
+    if [ $swap_mb -eq 512 ]; then
+        swap_size_for_check=1  # Round up 512MB to 1GB for safety margin
+    else
+        swap_size_for_check=$(( swap_mb / 1024 ))
+    fi
+
+    local remaining_gb=$(( available_gb - swap_size_for_check ))
+
+    # Downgrade recommendation if insufficient space (maintain 2GB free minimum)
+    while [ $remaining_gb -lt 2 ] && [ $swap_mb -gt 512 ]; do
+        if [ $swap_mb -ge 3072 ]; then
+            swap_mb=2048  # 3GB → 2GB
+        elif [ $swap_mb -ge 2048 ]; then
+            swap_mb=1024  # 2GB → 1GB
+        elif [ $swap_mb -ge 1024 ]; then
+            swap_mb=512   # 1GB → 512MB
+        fi
+
+        # Recalculate
+        if [ $swap_mb -eq 512 ]; then
+            swap_size_for_check=1
+        else
+            swap_size_for_check=$(( swap_mb / 1024 ))
+        fi
+        remaining_gb=$(( available_gb - swap_size_for_check ))
+    done
+
+    # Convert to appropriate unit (M or G)
+    if [ $swap_mb -ge 1024 ]; then
+        local swap_gb=$(( swap_mb / 1024 ))
+        echo "${swap_gb}G"
+    else
+        echo "${swap_mb}M"
+    fi
 }
 
-# Calculate optimal swappiness based on RAM
+# Get current swap size in MB
+get_current_swap_mb() {
+    # Get swap size from /proc/swaps (more reliable than checking file)
+    local swap_kb=$(grep -v "Filename" /proc/swaps 2>/dev/null | awk '{sum+=$3} END {print sum}')
+
+    if [ -z "$swap_kb" ] || [ "$swap_kb" = "0" ]; then
+        echo 0
+    else
+        local swap_mb=$((swap_kb / 1024))
+        echo $swap_mb
+    fi
+}
+
+# Calculate optimal swappiness based on RAM and swap size (Solution C)
 get_recommended_swappiness() {
     local ram_mb=$(get_ram_mb)
+    local swap_mb=$(get_current_swap_mb)
     local swappiness=10
 
-    # Optimal swappiness for VPS based on RAM:
-    # RAM < 1GB: 60 (default, needs more swap usage)
-    # RAM 1-2GB: 40 (moderate swap usage)
-    # RAM 2-4GB: 20 (reduced swap usage)
-    # RAM 4-8GB: 10 (minimal swap usage)
-    # RAM > 8GB: 5 (very minimal swap usage)
+    # Simplified practical recommendation (Solution C):
+    # Two-dimensional decision: RAM size × Swap adequacy
+    #
+    # Swap adequacy definition:
+    # - RAM < 2GB: Swap ≥ 1GB is adequate
+    # - RAM ≥ 2GB: Swap ≥ 2GB is adequate
+    #
+    # Decision matrix:
+    # RAM       │ Swap Adequate │ Swap Insufficient
+    # ──────────┼───────────────┼──────────────────
+    # < 1GB     │      30       │       50
+    # 1-2GB     │      20       │       30
+    # 2-4GB     │      10       │       20
+    # 4-8GB     │      5        │       10
+    # > 8GB     │      1        │       5
 
-    if [ $ram_mb -lt 1024 ]; then
-        swappiness=60
-    elif [ $ram_mb -lt 2048 ]; then
-        swappiness=40
-    elif [ $ram_mb -lt 4096 ]; then
-        swappiness=20
-    elif [ $ram_mb -lt 8192 ]; then
-        swappiness=10
+    # Determine if swap is adequate based on RAM size
+    local swap_adequate=0
+    if [ $ram_mb -lt 2048 ]; then
+        # For RAM < 2GB: adequate if swap ≥ 1GB
+        [ $swap_mb -ge 1024 ] && swap_adequate=1
     else
-        swappiness=5
+        # For RAM ≥ 2GB: adequate if swap ≥ 2GB
+        [ $swap_mb -ge 2048 ] && swap_adequate=1
+    fi
+
+    # Calculate swappiness based on RAM and swap adequacy
+    if [ $ram_mb -lt 1024 ]; then
+        # RAM < 1GB
+        [ $swap_adequate -eq 1 ] && swappiness=30 || swappiness=50
+    elif [ $ram_mb -lt 2048 ]; then
+        # RAM 1-2GB
+        [ $swap_adequate -eq 1 ] && swappiness=20 || swappiness=30
+    elif [ $ram_mb -lt 4096 ]; then
+        # RAM 2-4GB
+        [ $swap_adequate -eq 1 ] && swappiness=10 || swappiness=20
+    elif [ $ram_mb -lt 8192 ]; then
+        # RAM 4-8GB
+        [ $swap_adequate -eq 1 ] && swappiness=5 || swappiness=10
+    else
+        # RAM > 8GB
+        [ $swap_adequate -eq 1 ] && swappiness=1 || swappiness=5
     fi
 
     echo $swappiness
+}
+
+# Calculate optimal cache pressure based on RAM (Solution D)
+get_recommended_cache_pressure() {
+    local ram_mb=$(get_ram_mb)
+    local cache_pressure=50
+
+    # RAM-based cache pressure recommendation (Solution D):
+    # Controls how aggressively the kernel reclaims inode/dentry cache
+    #
+    # Lower values = retain cache more (better for file-heavy operations)
+    # Higher values = reclaim cache more (free up memory)
+    #
+    # RAM       │ Recommended │ Reasoning
+    # ──────────┼─────────────┼──────────────────────────────────
+    # < 1GB     │    100      │ Tight memory, use default balance
+    # 1-2GB     │     75      │ Moderate retention, some pressure
+    # 2-4GB     │     50      │ Good balance for VPS workloads
+    # 4-8GB     │     50      │ Sufficient memory, retain cache
+    # > 8GB     │     25      │ Plenty of memory, keep cache hot
+
+    if [ $ram_mb -lt 1024 ]; then
+        # RAM < 1GB: Use system default (100)
+        cache_pressure=100
+    elif [ $ram_mb -lt 2048 ]; then
+        # RAM 1-2GB: Moderate cache retention
+        cache_pressure=75
+    elif [ $ram_mb -lt 8192 ]; then
+        # RAM 2-8GB: Good balance (VPS sweet spot)
+        cache_pressure=50
+    else
+        # RAM > 8GB: Aggressive cache retention
+        cache_pressure=25
+    fi
+
+    echo $cache_pressure
 }
 
 #==============================================================================
@@ -361,6 +485,9 @@ create_swap() {
     # Get optimal swappiness for this system
     local swappiness=$(get_recommended_swappiness)
 
+    # Get optimal cache pressure for this system
+    local cache_pressure=$(get_recommended_cache_pressure)
+
     # Set swappiness (how aggressively the kernel swaps)
     if ! grep -q "vm.swappiness" /etc/sysctl.conf; then
         echo "vm.swappiness=$swappiness" >> /etc/sysctl.conf
@@ -368,17 +495,17 @@ create_swap() {
         sed -i "s/vm.swappiness=.*/vm.swappiness=$swappiness/" /etc/sysctl.conf
     fi
 
-    # Set cache pressure
+    # Set cache pressure (how aggressively the kernel reclaims inode/dentry cache)
     if ! grep -q "vm.vfs_cache_pressure" /etc/sysctl.conf; then
-        echo "vm.vfs_cache_pressure=50" >> /etc/sysctl.conf
+        echo "vm.vfs_cache_pressure=$cache_pressure" >> /etc/sysctl.conf
     else
-        sed -i 's/vm.vfs_cache_pressure=.*/vm.vfs_cache_pressure=50/' /etc/sysctl.conf
+        sed -i "s/vm.vfs_cache_pressure=.*/vm.vfs_cache_pressure=$cache_pressure/" /etc/sysctl.conf
     fi
 
     # Apply settings
     sysctl -p > /dev/null 2>&1
 
-    print_info "Swappiness set to $swappiness (optimized for ${ram_display} RAM)"
+    print_info "Swappiness set to $swappiness, Cache pressure set to $cache_pressure (optimized for ${ram_display} RAM)"
 
     echo ""
     print_success "Swap space created successfully!"
