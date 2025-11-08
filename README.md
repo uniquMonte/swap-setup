@@ -15,8 +15,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/uniquMonte/swap-setup/main/ins
 2) Remove Swap
 3) Modify Swap Size
 4) View Detailed Configuration
-5) Uninstall Script
-6) Refresh Status
+5) Refresh Status
 0) Exit
 ```
 
