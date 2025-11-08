@@ -147,6 +147,8 @@ show_swap_config() {
     fi
     echo -e "  Description:   Controls swap usage tendency (0-100)"
     echo -e "                 Lower = prefer RAM, Higher = use swap more often"
+    echo -e "  Common values: 1 (min swap), 10 (desktop), 20-30 (VPS),"
+    echo -e "                 60 (default), 100 (max swap)"
     echo ""
 
     # Get current cache pressure
@@ -163,6 +165,8 @@ show_swap_config() {
     fi
     echo -e "  Description:   Controls cache reclaim aggressiveness"
     echo -e "                 Lower = retain cache, Higher = free up memory"
+    echo -e "  Common values: 25 (retain most), 50 (balanced), 75 (moderate),"
+    echo -e "                 100 (default), 150+ (aggressive reclaim)"
 
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
