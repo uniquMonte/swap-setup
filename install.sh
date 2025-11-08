@@ -77,6 +77,90 @@ get_swap_info() {
     echo ""
 }
 
+# Show detailed swap configuration
+show_swap_config() {
+    clear
+    print_banner
+
+    # System information
+    local ram_mb=$(get_ram_mb)
+    local ram_gb=$(echo "scale=1; $ram_mb / 1024" | bc)
+    local available_gb=$(check_disk_space)
+
+    echo -e "${BLUE}System Resources:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "RAM:             ${ram_gb} GB"
+    echo "Available Disk:  ${available_gb} GB"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Swap status
+    local swap_total=$(free -h | grep Swap | awk '{print $2}')
+    local swap_used=$(free -h | grep Swap | awk '{print $3}')
+    local swap_free=$(free -h | grep Swap | awk '{print $4}')
+
+    echo -e "${BLUE}Swap Status:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Total:           $swap_total"
+    echo "Used:            $swap_used"
+    echo "Free:            $swap_free"
+
+    if [ -f "$SWAP_FILE" ]; then
+        local swap_size=$(ls -lh $SWAP_FILE | awk '{print $5}')
+        echo "Swap File:       $SWAP_FILE ($swap_size)"
+
+        # Check if in fstab
+        if grep -q "$SWAP_FILE" /etc/fstab 2>/dev/null; then
+            echo "Persistence:     ${GREEN}Enabled${NC} (in /etc/fstab)"
+        else
+            echo "Persistence:     ${YELLOW}Not enabled${NC}"
+        fi
+    else
+        echo "Status:          ${YELLOW}No swap file configured${NC}"
+    fi
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Kernel parameters
+    echo -e "${BLUE}Kernel Parameters:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    # Get current swappiness
+    local current_swappiness=$(cat /proc/sys/vm/swappiness 2>/dev/null || echo "N/A")
+    local recommended_swappiness=$(get_recommended_swappiness)
+
+    if [ "$current_swappiness" = "$recommended_swappiness" ]; then
+        echo "Swappiness:      ${GREEN}$current_swappiness${NC} (optimal)"
+    elif [ "$current_swappiness" = "N/A" ]; then
+        echo "Swappiness:      ${YELLOW}Not set${NC} (recommended: $recommended_swappiness)"
+    else
+        echo "Swappiness:      $current_swappiness (recommended: ${GREEN}$recommended_swappiness${NC})"
+    fi
+
+    # Get current cache pressure
+    local cache_pressure=$(cat /proc/sys/vm/vfs_cache_pressure 2>/dev/null || echo "N/A")
+    if [ "$cache_pressure" = "50" ]; then
+        echo "Cache Pressure:  ${GREEN}$cache_pressure${NC} (optimal)"
+    elif [ "$cache_pressure" = "N/A" ]; then
+        echo "Cache Pressure:  ${YELLOW}Not set${NC} (recommended: 50)"
+    else
+        echo "Cache Pressure:  $cache_pressure (recommended: ${GREEN}50${NC})"
+    fi
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Recommendations
+    local recommended_swap=$(get_recommended_swap)
+    echo -e "${BLUE}Recommendations:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Swap Size:       ${GREEN}$recommended_swap${NC}"
+    echo "Swappiness:      ${GREEN}$recommended_swappiness${NC}"
+    echo "Cache Pressure:  ${GREEN}50${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+}
+
 # Check available disk space
 check_disk_space() {
     local available_gb=$(df -BG / | tail -1 | awk '{print $4}' | sed 's/G//')
@@ -366,9 +450,10 @@ show_menu() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "1) Add/Create Swap"
     echo "2) Remove Swap"
-    echo "3) Install Script to System"
-    echo "4) Uninstall Script"
-    echo "5) Refresh Status"
+    echo "3) View Detailed Configuration"
+    echo "4) Install Script to System"
+    echo "5) Uninstall Script"
+    echo "6) Refresh Status"
     echo "0) Exit"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
@@ -400,8 +485,12 @@ main() {
                 get_swap_info
                 exit 0
                 ;;
+            config|show)
+                show_swap_config
+                exit 0
+                ;;
             *)
-                echo "Usage: $0 {install|uninstall|add|remove|status}"
+                echo "Usage: $0 {install|uninstall|add|remove|status|config}"
                 exit 1
                 ;;
         esac
@@ -410,7 +499,7 @@ main() {
     # Interactive menu
     while true; do
         show_menu
-        read -p "Enter your choice [0-5]: " choice
+        read -p "Enter your choice [0-6]: " choice
 
         case $choice in
             1)
@@ -422,15 +511,19 @@ main() {
                 read -p "Press Enter to continue..."
                 ;;
             3)
-                install_script
+                show_swap_config
                 read -p "Press Enter to continue..."
                 ;;
             4)
+                install_script
+                read -p "Press Enter to continue..."
+                ;;
+            5)
                 uninstall_script
                 read -p "Press Enter to continue..."
                 exit 0
                 ;;
-            5)
+            6)
                 continue
                 ;;
             0)
