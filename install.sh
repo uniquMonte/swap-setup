@@ -77,10 +77,175 @@ get_swap_info() {
     echo ""
 }
 
+# Show detailed swap configuration
+show_swap_config() {
+    clear
+    print_banner
+
+    # System information
+    local ram_mb=$(get_ram_mb)
+    local ram_gb=$(echo "scale=1; $ram_mb / 1024" | bc)
+    local available_gb=$(check_disk_space)
+
+    echo -e "${BLUE}System Resources:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "RAM:             ${ram_gb} GB"
+    echo "Available Disk:  ${available_gb} GB"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Swap status
+    local swap_total=$(free -h | grep Swap | awk '{print $2}')
+    local swap_used=$(free -h | grep Swap | awk '{print $3}')
+    local swap_free=$(free -h | grep Swap | awk '{print $4}')
+
+    echo -e "${BLUE}Swap Status:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Total:           $swap_total"
+    echo "Used:            $swap_used"
+    echo "Free:            $swap_free"
+
+    if [ -f "$SWAP_FILE" ]; then
+        local swap_size=$(ls -lh $SWAP_FILE | awk '{print $5}')
+        echo "Swap File:       $SWAP_FILE ($swap_size)"
+
+        # Check if in fstab
+        if grep -q "$SWAP_FILE" /etc/fstab 2>/dev/null; then
+            echo "Persistence:     ${GREEN}Enabled${NC} (in /etc/fstab)"
+        else
+            echo "Persistence:     ${YELLOW}Not enabled${NC}"
+        fi
+    else
+        echo "Status:          ${YELLOW}No swap file configured${NC}"
+    fi
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Kernel parameters
+    echo -e "${BLUE}Kernel Parameters:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    # Get current swappiness
+    local current_swappiness=$(cat /proc/sys/vm/swappiness 2>/dev/null || echo "N/A")
+    local recommended_swappiness=$(get_recommended_swappiness)
+
+    if [ "$current_swappiness" = "$recommended_swappiness" ]; then
+        echo "Swappiness:      ${GREEN}$current_swappiness${NC} (optimal)"
+    elif [ "$current_swappiness" = "N/A" ]; then
+        echo "Swappiness:      ${YELLOW}Not set${NC} (recommended: $recommended_swappiness)"
+    else
+        echo "Swappiness:      $current_swappiness (recommended: ${GREEN}$recommended_swappiness${NC})"
+    fi
+
+    # Get current cache pressure
+    local cache_pressure=$(cat /proc/sys/vm/vfs_cache_pressure 2>/dev/null || echo "N/A")
+    if [ "$cache_pressure" = "50" ]; then
+        echo "Cache Pressure:  ${GREEN}$cache_pressure${NC} (optimal)"
+    elif [ "$cache_pressure" = "N/A" ]; then
+        echo "Cache Pressure:  ${YELLOW}Not set${NC} (recommended: 50)"
+    else
+        echo "Cache Pressure:  $cache_pressure (recommended: ${GREEN}50${NC})"
+    fi
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Recommendations
+    local recommended_swap=$(get_recommended_swap)
+    echo -e "${BLUE}Recommendations:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Swap Size:       ${GREEN}$recommended_swap${NC}"
+    echo "Swappiness:      ${GREEN}$recommended_swappiness${NC}"
+    echo "Cache Pressure:  ${GREEN}50${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+}
+
 # Check available disk space
 check_disk_space() {
     local available_gb=$(df -BG / | tail -1 | awk '{print $4}' | sed 's/G//')
     echo $available_gb
+}
+
+# Get total RAM in MB
+get_ram_mb() {
+    local ram_mb=$(free -m | grep Mem | awk '{print $2}')
+    echo $ram_mb
+}
+
+# Calculate recommended swap size based on RAM
+get_recommended_swap() {
+    local ram_mb=$(get_ram_mb)
+    local available_gb=$(check_disk_space)
+    local swap_mb=0
+
+    # Optimal swap recommendation for VPS:
+    # RAM <= 2GB: 2x RAM (better for low memory systems)
+    # RAM 2-4GB: 1x RAM (balanced approach)
+    # RAM 4-8GB: 4GB fixed (sufficient for most cases)
+    # RAM > 8GB: 4GB fixed (high RAM systems need less swap)
+
+    if [ $ram_mb -le 2048 ]; then
+        # For systems with 2GB or less RAM: recommend 2x RAM
+        swap_mb=$((ram_mb * 2))
+    elif [ $ram_mb -le 4096 ]; then
+        # For systems with 2-4GB RAM: recommend 1x RAM
+        swap_mb=$ram_mb
+    else
+        # For systems with more than 4GB RAM: recommend 4GB fixed
+        swap_mb=4096
+    fi
+
+    # Convert MB to GB (round up)
+    local swap_gb=$(( (swap_mb + 1023) / 1024 ))
+
+    # Cap at 8GB maximum (no VPS needs more than 8GB swap)
+    if [ $swap_gb -gt 8 ]; then
+        swap_gb=8
+    fi
+
+    # Ensure minimum of 1GB
+    if [ $swap_gb -lt 1 ]; then
+        swap_gb=1
+    fi
+
+    # Check if we have enough disk space (need at least swap + 2GB free)
+    if [ $available_gb -lt $((swap_gb + 2)) ]; then
+        # Reduce swap size to fit available space
+        swap_gb=$((available_gb - 2))
+        if [ $swap_gb -lt 1 ]; then
+            swap_gb=1
+        fi
+    fi
+
+    echo "${swap_gb}G"
+}
+
+# Calculate optimal swappiness based on RAM
+get_recommended_swappiness() {
+    local ram_mb=$(get_ram_mb)
+    local swappiness=10
+
+    # Optimal swappiness for VPS based on RAM:
+    # RAM < 1GB: 60 (default, needs more swap usage)
+    # RAM 1-2GB: 40 (moderate swap usage)
+    # RAM 2-4GB: 20 (reduced swap usage)
+    # RAM 4-8GB: 10 (minimal swap usage)
+    # RAM > 8GB: 5 (very minimal swap usage)
+
+    if [ $ram_mb -lt 1024 ]; then
+        swappiness=60
+    elif [ $ram_mb -lt 2048 ]; then
+        swappiness=40
+    elif [ $ram_mb -lt 4096 ]; then
+        swappiness=20
+    elif [ $ram_mb -lt 8192 ]; then
+        swappiness=10
+    else
+        swappiness=5
+    fi
+
+    echo $swappiness
 }
 
 #==============================================================================
@@ -89,39 +254,41 @@ check_disk_space() {
 
 # Create swap
 create_swap() {
-    echo -e "\n${BLUE}Select Swap Size:${NC}"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "1) 1 GB"
-    echo "2) 2 GB"
-    echo "3) 4 GB"
-    echo "4) 8 GB"
-    echo "5) Custom size"
-    echo "0) Cancel"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    # Get system information
+    local ram_mb=$(get_ram_mb)
+    local ram_gb=$(echo "scale=1; $ram_mb / 1024" | bc)
+    local available_gb=$(check_disk_space)
+    local recommended=$(get_recommended_swap)
 
-    read -p "Enter your choice [0-5]: " size_choice
+    echo ""
+    echo -e "${BLUE}System Information:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "RAM:             ${ram_gb} GB"
+    echo "Available Disk:  ${available_gb} GB"
+    echo "Recommended:     ${GREEN}${recommended}${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo -e "${BLUE}Enter swap size (or press Enter for recommended ${recommended}):${NC}"
+    echo "Examples: 1G, 2G, 512M"
+    echo "Enter 0 to cancel"
+    echo ""
 
-    case $size_choice in
-        1) swap_size="1G" ;;
-        2) swap_size="2G" ;;
-        3) swap_size="4G" ;;
-        4) swap_size="8G" ;;
-        5)
-            read -p "Enter custom size (e.g., 512M, 3G): " swap_size
-            if [[ ! $swap_size =~ ^[0-9]+[MG]$ ]]; then
-                print_error "Invalid format. Please use format like: 512M or 2G"
-                return 1
-            fi
-            ;;
-        0)
-            print_info "Operation cancelled"
-            return 0
-            ;;
-        *)
-            print_error "Invalid choice"
+    read -p "Swap size [${recommended}]: " swap_size
+
+    # If empty, use recommended
+    if [ -z "$swap_size" ]; then
+        swap_size=$recommended
+        print_success "Using recommended size: $swap_size"
+    elif [ "$swap_size" = "0" ]; then
+        print_info "Operation cancelled"
+        return 0
+    else
+        # Validate custom size
+        if [[ ! $swap_size =~ ^[0-9]+[MG]$ ]]; then
+            print_error "Invalid format. Please use format like: 512M or 2G"
             return 1
-            ;;
-    esac
+        fi
+    fi
 
     # Check if swap already exists
     if [ -f "$SWAP_FILE" ]; then
@@ -176,11 +343,14 @@ create_swap() {
     # Optimize swap settings
     print_info "Optimizing swap settings..."
 
+    # Get optimal swappiness for this system
+    local swappiness=$(get_recommended_swappiness)
+
     # Set swappiness (how aggressively the kernel swaps)
     if ! grep -q "vm.swappiness" /etc/sysctl.conf; then
-        echo "vm.swappiness=10" >> /etc/sysctl.conf
+        echo "vm.swappiness=$swappiness" >> /etc/sysctl.conf
     else
-        sed -i 's/vm.swappiness=.*/vm.swappiness=10/' /etc/sysctl.conf
+        sed -i "s/vm.swappiness=.*/vm.swappiness=$swappiness/" /etc/sysctl.conf
     fi
 
     # Set cache pressure
@@ -192,6 +362,8 @@ create_swap() {
 
     # Apply settings
     sysctl -p > /dev/null 2>&1
+
+    print_info "Swappiness set to $swappiness (optimized for ${ram_gb}GB RAM)"
 
     echo ""
     print_success "Swap space created successfully!"
@@ -278,7 +450,7 @@ show_menu() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "1) Add/Create Swap"
     echo "2) Remove Swap"
-    echo "3) Install Script to System"
+    echo "3) View Detailed Configuration"
     echo "4) Uninstall Script"
     echo "5) Refresh Status"
     echo "0) Exit"
@@ -312,8 +484,12 @@ main() {
                 get_swap_info
                 exit 0
                 ;;
+            config|show)
+                show_swap_config
+                exit 0
+                ;;
             *)
-                echo "Usage: $0 {install|uninstall|add|remove|status}"
+                echo "Usage: $0 {install|uninstall|add|remove|status|config}"
                 exit 1
                 ;;
         esac
@@ -334,7 +510,7 @@ main() {
                 read -p "Press Enter to continue..."
                 ;;
             3)
-                install_script
+                show_swap_config
                 read -p "Press Enter to continue..."
                 ;;
             4)
