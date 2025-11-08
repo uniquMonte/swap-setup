@@ -451,9 +451,8 @@ show_menu() {
     echo "1) Add/Create Swap"
     echo "2) Remove Swap"
     echo "3) View Detailed Configuration"
-    echo "4) Install Script to System"
-    echo "5) Uninstall Script"
-    echo "6) Refresh Status"
+    echo "4) Uninstall Script"
+    echo "5) Refresh Status"
     echo "0) Exit"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
@@ -499,7 +498,7 @@ main() {
     # Interactive menu
     while true; do
         show_menu
-        read -p "Enter your choice [0-6]: " choice
+        read -p "Enter your choice [0-5]: " choice
 
         case $choice in
             1)
@@ -515,15 +514,11 @@ main() {
                 read -p "Press Enter to continue..."
                 ;;
             4)
-                install_script
-                read -p "Press Enter to continue..."
-                ;;
-            5)
                 uninstall_script
                 read -p "Press Enter to continue..."
                 exit 0
                 ;;
-            6)
+            5)
                 continue
                 ;;
             0)
