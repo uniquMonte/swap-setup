@@ -84,13 +84,21 @@ show_swap_config() {
 
     # System information
     local ram_mb=$(get_ram_mb)
-    local ram_gb=$(echo "scale=1; $ram_mb / 1024" | bc)
     local available_gb=$(check_disk_space)
+
+    # Format RAM display (use MB if < 1GB, otherwise GB)
+    local ram_display
+    if [ $ram_mb -lt 1024 ]; then
+        ram_display="${ram_mb} MB"
+    else
+        local ram_gb=$(echo "scale=1; $ram_mb / 1024" | bc)
+        ram_display="${ram_gb} GB"
+    fi
 
     echo -e "${BLUE}System Resources:${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "RAM:             ${ram_gb} GB"
-    echo "Available Disk:  ${available_gb} GB"
+    echo -e "RAM:             ${ram_display}"
+    echo -e "Available Disk:  ${available_gb} GB"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
@@ -256,16 +264,24 @@ get_recommended_swappiness() {
 create_swap() {
     # Get system information
     local ram_mb=$(get_ram_mb)
-    local ram_gb=$(echo "scale=1; $ram_mb / 1024" | bc)
     local available_gb=$(check_disk_space)
     local recommended=$(get_recommended_swap)
+
+    # Format RAM display (use MB if < 1GB, otherwise GB)
+    local ram_display
+    if [ $ram_mb -lt 1024 ]; then
+        ram_display="${ram_mb} MB"
+    else
+        local ram_gb=$(echo "scale=1; $ram_mb / 1024" | bc)
+        ram_display="${ram_gb} GB"
+    fi
 
     echo ""
     echo -e "${BLUE}System Information:${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "RAM:             ${ram_gb} GB"
-    echo "Available Disk:  ${available_gb} GB"
-    echo "Recommended:     ${GREEN}${recommended}${NC}"
+    echo -e "RAM:             ${ram_display}"
+    echo -e "Available Disk:  ${available_gb} GB"
+    echo -e "Recommended:     ${GREEN}${recommended}${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo -e "${BLUE}Enter swap size (or press Enter for recommended ${recommended}):${NC}"
@@ -363,7 +379,7 @@ create_swap() {
     # Apply settings
     sysctl -p > /dev/null 2>&1
 
-    print_info "Swappiness set to $swappiness (optimized for ${ram_gb}GB RAM)"
+    print_info "Swappiness set to $swappiness (optimized for ${ram_display} RAM)"
 
     echo ""
     print_success "Swap space created successfully!"
