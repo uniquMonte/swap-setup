@@ -93,35 +93,48 @@ get_ram_mb() {
 get_recommended_swap() {
     local ram_mb=$(get_ram_mb)
     local available_gb=$(check_disk_space)
-    local recommended=""
+    local swap_mb=0
 
-    # Recommendation logic for VPS:
-    # RAM < 1GB (1024MB): 2GB swap
-    # RAM 1-2GB: 2GB swap
-    # RAM 2-4GB: 2GB swap
-    # RAM 4-8GB: 4GB swap
-    # RAM > 8GB: 4GB swap
+    # Optimal swap recommendation for VPS:
+    # RAM <= 2GB: 2x RAM (better for low memory systems)
+    # RAM 2-4GB: 1x RAM (balanced approach)
+    # RAM 4-8GB: 4GB fixed (sufficient for most cases)
+    # RAM > 8GB: 4GB fixed (high RAM systems need less swap)
 
-    if [ $ram_mb -lt 1024 ]; then
-        recommended="2G"
-    elif [ $ram_mb -lt 2048 ]; then
-        recommended="2G"
-    elif [ $ram_mb -lt 4096 ]; then
-        recommended="2G"
-    elif [ $ram_mb -lt 8192 ]; then
-        recommended="4G"
+    if [ $ram_mb -le 2048 ]; then
+        # For systems with 2GB or less RAM: recommend 2x RAM
+        swap_mb=$((ram_mb * 2))
+    elif [ $ram_mb -le 4096 ]; then
+        # For systems with 2-4GB RAM: recommend 1x RAM
+        swap_mb=$ram_mb
     else
-        recommended="4G"
+        # For systems with more than 4GB RAM: recommend 4GB fixed
+        swap_mb=4096
     fi
 
-    # Check if we have enough disk space
-    local rec_size_gb=$(echo $recommended | sed 's/G//')
-    if [ $available_gb -lt $((rec_size_gb + 2)) ]; then
-        # Not enough space, recommend 1GB
-        recommended="1G"
+    # Convert MB to GB (round up)
+    local swap_gb=$(( (swap_mb + 1023) / 1024 ))
+
+    # Cap at 8GB maximum (no VPS needs more than 8GB swap)
+    if [ $swap_gb -gt 8 ]; then
+        swap_gb=8
     fi
 
-    echo $recommended
+    # Ensure minimum of 1GB
+    if [ $swap_gb -lt 1 ]; then
+        swap_gb=1
+    fi
+
+    # Check if we have enough disk space (need at least swap + 2GB free)
+    if [ $available_gb -lt $((swap_gb + 2)) ]; then
+        # Reduce swap size to fit available space
+        swap_gb=$((available_gb - 2))
+        if [ $swap_gb -lt 1 ]; then
+            swap_gb=1
+        fi
+    fi
+
+    echo "${swap_gb}G"
 }
 
 #==============================================================================
