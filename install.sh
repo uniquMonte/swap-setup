@@ -181,51 +181,98 @@ get_ram_mb() {
     echo $ram_mb
 }
 
-# Calculate recommended swap size based on RAM
+# Calculate recommended swap size based on RAM and available space
 get_recommended_swap() {
     local ram_mb=$(get_ram_mb)
     local available_gb=$(check_disk_space)
     local swap_mb=0
 
-    # Conservative swap recommendation for VPS:
-    # RAM < 1GB: 1GB swap (minimum practical size)
-    # RAM 1-8GB: 2GB swap (practical size for most VPS)
-    # RAM > 8GB: 1GB swap (high RAM systems rarely need swap)
+    # Balanced and practical swap recommendation for VPS (Solution 2)
+    # Two-dimensional decision matrix: RAM size × Available disk space
+    # Typical values: 512MB, 1GB, 2GB, 3GB
 
     if [ $ram_mb -lt 1024 ]; then
-        # For systems with less than 1GB RAM: recommend 1GB
-        swap_mb=1024
+        # RAM < 1GB: Small memory needs more swap proportionally
+        if [ $available_gb -gt 10 ]; then
+            swap_mb=2048  # 2GB - generous for small RAM with plenty of space
+        elif [ $available_gb -ge 3 ]; then
+            swap_mb=1024  # 1GB - practical minimum
+        else
+            swap_mb=512   # 512MB - tight space fallback
+        fi
+
+    elif [ $ram_mb -lt 2048 ]; then
+        # RAM 1-2GB: Lightweight applications, common budget VPS
+        if [ $available_gb -gt 5 ]; then
+            swap_mb=2048  # 2GB - comfortable swap space
+        else
+            swap_mb=1024  # 1GB - space-constrained
+        fi
+
+    elif [ $ram_mb -lt 4096 ]; then
+        # RAM 2-4GB: Most common VPS configuration
+        if [ $available_gb -gt 10 ]; then
+            swap_mb=3072  # 3GB - optimal for this RAM range
+        elif [ $available_gb -ge 3 ]; then
+            swap_mb=2048  # 2GB - balanced choice
+        else
+            swap_mb=1024  # 1GB - minimal but functional
+        fi
+
     elif [ $ram_mb -le 8192 ]; then
-        # For systems with 1-8GB RAM: recommend 2GB (practical and conservative)
-        swap_mb=2048
+        # RAM 4-8GB: Sufficient memory, moderate swap needed
+        if [ $available_gb -ge 3 ]; then
+            swap_mb=2048  # 2GB - safety buffer
+        else
+            swap_mb=1024  # 1GB - minimal swap
+        fi
+
     else
-        # For systems with more than 8GB RAM: recommend 1GB (minimal swap for emergency)
-        swap_mb=1024
-    fi
-
-    # Convert MB to GB (exact division, no rounding needed)
-    local swap_gb=$(( swap_mb / 1024 ))
-
-    # Cap at 8GB maximum (no VPS needs more than 8GB swap)
-    if [ $swap_gb -gt 8 ]; then
-        swap_gb=8
-    fi
-
-    # Ensure minimum of 1GB
-    if [ $swap_gb -lt 1 ]; then
-        swap_gb=1
-    fi
-
-    # Check if we have enough disk space (need at least swap + 2GB free)
-    if [ $available_gb -lt $((swap_gb + 2)) ]; then
-        # Reduce swap size to fit available space
-        swap_gb=$((available_gb - 2))
-        if [ $swap_gb -lt 1 ]; then
-            swap_gb=1
+        # RAM > 8GB: Large memory, swap rarely used
+        if [ $available_gb -ge 3 ]; then
+            swap_mb=1024  # 1GB - emergency use only
+        else
+            swap_mb=512   # 512MB - absolute minimum
         fi
     fi
 
-    echo "${swap_gb}G"
+    # Safety check: ensure at least 2GB free disk space after creating swap
+    # Calculate swap size in GB for boundary checking
+    local swap_size_for_check
+    if [ $swap_mb -eq 512 ]; then
+        swap_size_for_check=1  # Round up 512MB to 1GB for safety margin
+    else
+        swap_size_for_check=$(( swap_mb / 1024 ))
+    fi
+
+    local remaining_gb=$(( available_gb - swap_size_for_check ))
+
+    # Downgrade recommendation if insufficient space (maintain 2GB free minimum)
+    while [ $remaining_gb -lt 2 ] && [ $swap_mb -gt 512 ]; do
+        if [ $swap_mb -ge 3072 ]; then
+            swap_mb=2048  # 3GB → 2GB
+        elif [ $swap_mb -ge 2048 ]; then
+            swap_mb=1024  # 2GB → 1GB
+        elif [ $swap_mb -ge 1024 ]; then
+            swap_mb=512   # 1GB → 512MB
+        fi
+
+        # Recalculate
+        if [ $swap_mb -eq 512 ]; then
+            swap_size_for_check=1
+        else
+            swap_size_for_check=$(( swap_mb / 1024 ))
+        fi
+        remaining_gb=$(( available_gb - swap_size_for_check ))
+    done
+
+    # Convert to appropriate unit (M or G)
+    if [ $swap_mb -ge 1024 ]; then
+        local swap_gb=$(( swap_mb / 1024 ))
+        echo "${swap_gb}G"
+    else
+        echo "${swap_mb}M"
+    fi
 }
 
 # Calculate optimal swappiness based on RAM
