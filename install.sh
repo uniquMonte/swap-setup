@@ -743,56 +743,6 @@ uninstall_script() {
     fi
 }
 
-# Update script to latest version
-update_script() {
-    print_info "Checking for updates..."
-
-    local temp_file="/tmp/swap-setup-install.sh"
-    local github_url="https://raw.githubusercontent.com/uniquMonte/swap-setup/main/install.sh"
-
-    # Download latest version
-    if ! curl -Ls "$github_url" -o "$temp_file"; then
-        print_error "Failed to download update from GitHub"
-        return 1
-    fi
-
-    # Verify downloaded file is valid
-    if ! bash -n "$temp_file" 2>/dev/null; then
-        print_error "Downloaded file is not a valid bash script"
-        rm -f "$temp_file"
-        return 1
-    fi
-
-    print_success "Latest version downloaded successfully"
-
-    # Update current script if running from a file
-    if [ -f "$0" ] && [ "$0" != "/dev/stdin" ]; then
-        print_info "Updating current script..."
-        cp "$temp_file" "$0"
-        chmod +x "$0"
-        print_success "Current script updated"
-    fi
-
-    # Update installed version if exists
-    if [ -f "$SCRIPT_INSTALL_PATH" ]; then
-        print_info "Updating installed version at $SCRIPT_INSTALL_PATH..."
-        cp "$temp_file" "$SCRIPT_INSTALL_PATH"
-        chmod +x "$SCRIPT_INSTALL_PATH"
-        print_success "Installed version updated"
-    fi
-
-    # Clean up
-    rm -f "$temp_file"
-
-    echo ""
-    print_success "Update completed successfully!"
-    print_info "Please restart the script to use the latest version"
-    echo ""
-
-    read -p "Press Enter to exit..."
-    exit 0
-}
-
 #==============================================================================
 # Main Menu
 #==============================================================================
@@ -808,9 +758,8 @@ show_menu() {
     echo "2) Remove Swap"
     echo "3) Modify Swap Size"
     echo "4) View Detailed Configuration"
-    echo "5) Update Script"
-    echo "6) Uninstall Script"
-    echo "7) Refresh Status"
+    echo "5) Uninstall Script"
+    echo "6) Refresh Status"
     echo "0) Exit"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
@@ -851,12 +800,8 @@ main() {
                 show_swap_config
                 exit 0
                 ;;
-            update|upgrade)
-                update_script
-                exit 0
-                ;;
             *)
-                echo "Usage: $0 {install|uninstall|add|remove|modify|status|config|update}"
+                echo "Usage: $0 {install|uninstall|add|remove|modify|status|config}"
                 exit 1
                 ;;
         esac
@@ -865,7 +810,7 @@ main() {
     # Interactive menu
     while true; do
         show_menu
-        read -p "Enter your choice [0-7] (or press Enter to exit): " choice
+        read -p "Enter your choice [0-6] (or press Enter to exit): " choice
 
         # Default to 0 (Exit) if user presses Enter without input
         choice=${choice:-0}
@@ -888,14 +833,11 @@ main() {
                 read -p "Press Enter to continue..."
                 ;;
             5)
-                update_script
-                ;;
-            6)
                 uninstall_script
                 read -p "Press Enter to continue..."
                 exit 0
                 ;;
-            7)
+            6)
                 continue
                 ;;
             0)
