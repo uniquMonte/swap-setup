@@ -83,45 +83,88 @@ check_disk_space() {
     echo $available_gb
 }
 
+# Get total RAM in MB
+get_ram_mb() {
+    local ram_mb=$(free -m | grep Mem | awk '{print $2}')
+    echo $ram_mb
+}
+
+# Calculate recommended swap size based on RAM
+get_recommended_swap() {
+    local ram_mb=$(get_ram_mb)
+    local available_gb=$(check_disk_space)
+    local recommended=""
+
+    # Recommendation logic for VPS:
+    # RAM < 1GB (1024MB): 2GB swap
+    # RAM 1-2GB: 2GB swap
+    # RAM 2-4GB: 2GB swap
+    # RAM 4-8GB: 4GB swap
+    # RAM > 8GB: 4GB swap
+
+    if [ $ram_mb -lt 1024 ]; then
+        recommended="2G"
+    elif [ $ram_mb -lt 2048 ]; then
+        recommended="2G"
+    elif [ $ram_mb -lt 4096 ]; then
+        recommended="2G"
+    elif [ $ram_mb -lt 8192 ]; then
+        recommended="4G"
+    else
+        recommended="4G"
+    fi
+
+    # Check if we have enough disk space
+    local rec_size_gb=$(echo $recommended | sed 's/G//')
+    if [ $available_gb -lt $((rec_size_gb + 2)) ]; then
+        # Not enough space, recommend 1GB
+        recommended="1G"
+    fi
+
+    echo $recommended
+}
+
 #==============================================================================
 # Swap Management Functions
 #==============================================================================
 
 # Create swap
 create_swap() {
-    echo -e "\n${BLUE}Select Swap Size:${NC}"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "1) 1 GB"
-    echo "2) 2 GB"
-    echo "3) 4 GB"
-    echo "4) 8 GB"
-    echo "5) Custom size"
-    echo "0) Cancel"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    # Get system information
+    local ram_mb=$(get_ram_mb)
+    local ram_gb=$(echo "scale=1; $ram_mb / 1024" | bc)
+    local available_gb=$(check_disk_space)
+    local recommended=$(get_recommended_swap)
 
-    read -p "Enter your choice [0-5]: " size_choice
+    echo ""
+    echo -e "${BLUE}System Information:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "RAM:             ${ram_gb} GB"
+    echo "Available Disk:  ${available_gb} GB"
+    echo "Recommended:     ${GREEN}${recommended}${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo -e "${BLUE}Enter swap size (or press Enter for recommended ${recommended}):${NC}"
+    echo "Examples: 1G, 2G, 512M"
+    echo "Enter 0 to cancel"
+    echo ""
 
-    case $size_choice in
-        1) swap_size="1G" ;;
-        2) swap_size="2G" ;;
-        3) swap_size="4G" ;;
-        4) swap_size="8G" ;;
-        5)
-            read -p "Enter custom size (e.g., 512M, 3G): " swap_size
-            if [[ ! $swap_size =~ ^[0-9]+[MG]$ ]]; then
-                print_error "Invalid format. Please use format like: 512M or 2G"
-                return 1
-            fi
-            ;;
-        0)
-            print_info "Operation cancelled"
-            return 0
-            ;;
-        *)
-            print_error "Invalid choice"
+    read -p "Swap size [${recommended}]: " swap_size
+
+    # If empty, use recommended
+    if [ -z "$swap_size" ]; then
+        swap_size=$recommended
+        print_success "Using recommended size: $swap_size"
+    elif [ "$swap_size" = "0" ]; then
+        print_info "Operation cancelled"
+        return 0
+    else
+        # Validate custom size
+        if [[ ! $swap_size =~ ^[0-9]+[MG]$ ]]; then
+            print_error "Invalid format. Please use format like: 512M or 2G"
             return 1
-            ;;
-    esac
+        fi
+    fi
 
     # Check if swap already exists
     if [ -f "$SWAP_FILE" ]; then
