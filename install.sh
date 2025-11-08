@@ -203,8 +203,8 @@ get_recommended_swap() {
         swap_mb=1024
     fi
 
-    # Convert MB to GB (round up)
-    local swap_gb=$(( (swap_mb + 1023) / 1024 ))
+    # Convert MB to GB (exact division, no rounding needed)
+    local swap_gb=$(( swap_mb / 1024 ))
 
     # Cap at 8GB maximum (no VPS needs more than 8GB swap)
     if [ $swap_gb -gt 8 ]; then
