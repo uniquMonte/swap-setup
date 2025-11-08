@@ -187,21 +187,20 @@ get_recommended_swap() {
     local available_gb=$(check_disk_space)
     local swap_mb=0
 
-    # Optimal swap recommendation for VPS:
-    # RAM <= 2GB: 2x RAM (better for low memory systems)
-    # RAM 2-4GB: 1x RAM (balanced approach)
-    # RAM 4-8GB: 4GB fixed (sufficient for most cases)
-    # RAM > 8GB: 4GB fixed (high RAM systems need less swap)
+    # Conservative swap recommendation for VPS:
+    # RAM < 1GB: 1GB swap (minimum practical size)
+    # RAM 1-8GB: 2GB swap (practical size for most VPS)
+    # RAM > 8GB: 1GB swap (high RAM systems rarely need swap)
 
-    if [ $ram_mb -le 2048 ]; then
-        # For systems with 2GB or less RAM: recommend 2x RAM
-        swap_mb=$((ram_mb * 2))
-    elif [ $ram_mb -le 4096 ]; then
-        # For systems with 2-4GB RAM: recommend 1x RAM
-        swap_mb=$ram_mb
+    if [ $ram_mb -lt 1024 ]; then
+        # For systems with less than 1GB RAM: recommend 1GB
+        swap_mb=1024
+    elif [ $ram_mb -le 8192 ]; then
+        # For systems with 1-8GB RAM: recommend 2GB (practical and conservative)
+        swap_mb=2048
     else
-        # For systems with more than 4GB RAM: recommend 4GB fixed
-        swap_mb=4096
+        # For systems with more than 8GB RAM: recommend 1GB (minimal swap for emergency)
+        swap_mb=1024
     fi
 
     # Convert MB to GB (round up)
