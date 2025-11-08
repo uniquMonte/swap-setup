@@ -706,43 +706,6 @@ modify_swap() {
     get_swap_info
 }
 
-# Install script to system
-install_script() {
-    if [ -f "$SCRIPT_INSTALL_PATH" ]; then
-        print_info "Script already installed at $SCRIPT_INSTALL_PATH"
-        return 0
-    fi
-
-    print_info "Installing script to $SCRIPT_INSTALL_PATH..."
-    cp "$0" "$SCRIPT_INSTALL_PATH" 2>/dev/null || {
-        # If $0 is not a file (piped from curl), download it
-        curl -Ls https://raw.githubusercontent.com/uniquMonte/swap-setup/main/install.sh -o "$SCRIPT_INSTALL_PATH"
-    }
-    chmod +x "$SCRIPT_INSTALL_PATH"
-
-    print_success "Script installed successfully!"
-    print_info "You can now run: swap-manager"
-}
-
-# Uninstall script
-uninstall_script() {
-    print_warning "This will remove the swap-manager script from your system."
-    print_info "Note: This will NOT remove the swap space. Use option 2 to remove swap first if needed."
-    read -p "Are you sure? (y/n): " confirm
-
-    if [[ $confirm != "y" && $confirm != "Y" ]]; then
-        print_info "Operation cancelled"
-        return 0
-    fi
-
-    if [ -f "$SCRIPT_INSTALL_PATH" ]; then
-        rm -f "$SCRIPT_INSTALL_PATH"
-        print_success "Script uninstalled successfully!"
-    else
-        print_warning "Script not found at $SCRIPT_INSTALL_PATH"
-    fi
-}
-
 #==============================================================================
 # Main Menu
 #==============================================================================
@@ -758,8 +721,7 @@ show_menu() {
     echo "2) Remove Swap"
     echo "3) Modify Swap Size"
     echo "4) View Detailed Configuration"
-    echo "5) Uninstall Script"
-    echo "6) Refresh Status"
+    echo "5) Refresh Status"
     echo "0) Exit"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
@@ -771,14 +733,6 @@ main() {
     # If run with arguments, handle them
     if [ $# -gt 0 ]; then
         case $1 in
-            install)
-                install_script
-                exit 0
-                ;;
-            uninstall)
-                uninstall_script
-                exit 0
-                ;;
             add)
                 create_swap
                 exit 0
@@ -801,7 +755,7 @@ main() {
                 exit 0
                 ;;
             *)
-                echo "Usage: $0 {install|uninstall|add|remove|modify|status|config}"
+                echo "Usage: $0 {add|remove|modify|status|config}"
                 exit 1
                 ;;
         esac
@@ -810,7 +764,7 @@ main() {
     # Interactive menu
     while true; do
         show_menu
-        read -p "Enter your choice [0-6] (or press Enter to exit): " choice
+        read -p "Enter your choice [0-5] (or press Enter to exit): " choice
 
         # Default to 0 (Exit) if user presses Enter without input
         choice=${choice:-0}
@@ -833,11 +787,6 @@ main() {
                 read -p "Press Enter to continue..."
                 ;;
             5)
-                uninstall_script
-                read -p "Press Enter to continue..."
-                exit 0
-                ;;
-            6)
                 continue
                 ;;
             0)
