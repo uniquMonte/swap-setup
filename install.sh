@@ -137,6 +137,33 @@ get_recommended_swap() {
     echo "${swap_gb}G"
 }
 
+# Calculate optimal swappiness based on RAM
+get_recommended_swappiness() {
+    local ram_mb=$(get_ram_mb)
+    local swappiness=10
+
+    # Optimal swappiness for VPS based on RAM:
+    # RAM < 1GB: 60 (default, needs more swap usage)
+    # RAM 1-2GB: 40 (moderate swap usage)
+    # RAM 2-4GB: 20 (reduced swap usage)
+    # RAM 4-8GB: 10 (minimal swap usage)
+    # RAM > 8GB: 5 (very minimal swap usage)
+
+    if [ $ram_mb -lt 1024 ]; then
+        swappiness=60
+    elif [ $ram_mb -lt 2048 ]; then
+        swappiness=40
+    elif [ $ram_mb -lt 4096 ]; then
+        swappiness=20
+    elif [ $ram_mb -lt 8192 ]; then
+        swappiness=10
+    else
+        swappiness=5
+    fi
+
+    echo $swappiness
+}
+
 #==============================================================================
 # Swap Management Functions
 #==============================================================================
@@ -232,11 +259,14 @@ create_swap() {
     # Optimize swap settings
     print_info "Optimizing swap settings..."
 
+    # Get optimal swappiness for this system
+    local swappiness=$(get_recommended_swappiness)
+
     # Set swappiness (how aggressively the kernel swaps)
     if ! grep -q "vm.swappiness" /etc/sysctl.conf; then
-        echo "vm.swappiness=10" >> /etc/sysctl.conf
+        echo "vm.swappiness=$swappiness" >> /etc/sysctl.conf
     else
-        sed -i 's/vm.swappiness=.*/vm.swappiness=10/' /etc/sysctl.conf
+        sed -i "s/vm.swappiness=.*/vm.swappiness=$swappiness/" /etc/sysctl.conf
     fi
 
     # Set cache pressure
@@ -248,6 +278,8 @@ create_swap() {
 
     # Apply settings
     sysctl -p > /dev/null 2>&1
+
+    print_info "Swappiness set to $swappiness (optimized for ${ram_gb}GB RAM)"
 
     echo ""
     print_success "Swap space created successfully!"
