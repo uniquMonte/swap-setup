@@ -119,12 +119,12 @@ show_swap_config() {
 
         # Check if in fstab
         if grep -q "$SWAP_FILE" /etc/fstab 2>/dev/null; then
-            echo "Persistence:     ${GREEN}Enabled${NC} (in /etc/fstab)"
+            echo -e "Persistence:     ${GREEN}Enabled${NC} (in /etc/fstab)"
         else
-            echo "Persistence:     ${YELLOW}Not enabled${NC}"
+            echo -e "Persistence:     ${YELLOW}Not enabled${NC}"
         fi
     else
-        echo "Status:          ${YELLOW}No swap file configured${NC}"
+        echo -e "Status:          ${YELLOW}No swap file configured${NC}"
     fi
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
@@ -138,21 +138,21 @@ show_swap_config() {
     local recommended_swappiness=$(get_recommended_swappiness)
 
     if [ "$current_swappiness" = "$recommended_swappiness" ]; then
-        echo "Swappiness:      ${GREEN}$current_swappiness${NC} (optimal)"
+        echo -e "Swappiness:      ${GREEN}$current_swappiness${NC} (optimal)"
     elif [ "$current_swappiness" = "N/A" ]; then
-        echo "Swappiness:      ${YELLOW}Not set${NC} (recommended: $recommended_swappiness)"
+        echo -e "Swappiness:      ${YELLOW}Not set${NC} (recommended: $recommended_swappiness)"
     else
-        echo "Swappiness:      $current_swappiness (recommended: ${GREEN}$recommended_swappiness${NC})"
+        echo -e "Swappiness:      $current_swappiness (recommended: ${GREEN}$recommended_swappiness${NC})"
     fi
 
     # Get current cache pressure
     local cache_pressure=$(cat /proc/sys/vm/vfs_cache_pressure 2>/dev/null || echo "N/A")
     if [ "$cache_pressure" = "50" ]; then
-        echo "Cache Pressure:  ${GREEN}$cache_pressure${NC} (optimal)"
+        echo -e "Cache Pressure:  ${GREEN}$cache_pressure${NC} (optimal)"
     elif [ "$cache_pressure" = "N/A" ]; then
-        echo "Cache Pressure:  ${YELLOW}Not set${NC} (recommended: 50)"
+        echo -e "Cache Pressure:  ${YELLOW}Not set${NC} (recommended: 50)"
     else
-        echo "Cache Pressure:  $cache_pressure (recommended: ${GREEN}50${NC})"
+        echo -e "Cache Pressure:  $cache_pressure (recommended: ${GREEN}50${NC})"
     fi
 
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -162,9 +162,9 @@ show_swap_config() {
     local recommended_swap=$(get_recommended_swap)
     echo -e "${BLUE}Recommendations:${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Swap Size:       ${GREEN}$recommended_swap${NC}"
-    echo "Swappiness:      ${GREEN}$recommended_swappiness${NC}"
-    echo "Cache Pressure:  ${GREEN}50${NC}"
+    echo -e "Swap Size:       ${GREEN}$recommended_swap${NC}"
+    echo -e "Swappiness:      ${GREEN}$recommended_swappiness${NC}"
+    echo -e "Cache Pressure:  ${GREEN}50${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 }
