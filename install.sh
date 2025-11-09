@@ -400,15 +400,24 @@ configure_swappiness() {
     local system_default=60
 
     echo ""
-    echo -e "${BLUE}Configure Swappiness:${NC}"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "1) System Default:  ${YELLOW}${system_default}${NC}"
-    echo -e "2) Recommended:     ${GREEN}${recommended}${NC} (optimized for your system)"
-    echo -e "3) Custom:          Specify your own value (0-100)"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}Configure Swappiness (controls swap usage tendency)${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "1) System Default:  ${system_default}"
+    echo "   (Standard Linux default)"
+    echo ""
+    echo "2) Recommended:     ${recommended}"
+    echo "   (Optimized for your system based on RAM and swap size)"
+    echo ""
+    echo "3) Custom Value:"
+    echo "   (Specify your own value between 0-100)"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     while true; do
+        echo ""
         read -p "Select option [1-3] (or press Enter for recommended): " swappiness_choice
 
         # Default to recommended if empty
@@ -453,15 +462,24 @@ configure_cache_pressure() {
     local system_default=100
 
     echo ""
-    echo -e "${BLUE}Configure Cache Pressure:${NC}"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "1) System Default:  ${YELLOW}${system_default}${NC}"
-    echo -e "2) Recommended:     ${GREEN}${recommended}${NC} (optimized for your system)"
-    echo -e "3) Custom:          Specify your own value (typically 0-200)"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}Configure Cache Pressure (controls cache reclaim behavior)${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "1) System Default:  ${system_default}"
+    echo "   (Standard Linux default)"
+    echo ""
+    echo "2) Recommended:     ${recommended}"
+    echo "   (Optimized for your system based on RAM size)"
+    echo ""
+    echo "3) Custom Value:"
+    echo "   (Specify your own value, typically 0-200)"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     while true; do
+        echo ""
         read -p "Select option [1-3] (or press Enter for recommended): " cache_choice
 
         # Default to recommended if empty
