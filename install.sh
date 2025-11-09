@@ -542,12 +542,11 @@ create_swap() {
     echo -e "Recommended:     ${GREEN}${recommended}${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo -e "${BLUE}Enter swap size (or press Enter for recommended ${recommended}):${NC}"
-    echo "Examples: 1G, 2G, 512M"
-    echo "Enter 0 to cancel"
+    echo -e "${BLUE}Configure Swap Size:${NC}"
+    echo "Examples: 1G, 2G, 512M  |  Enter 0 to cancel"
     echo ""
 
-    read -p "Swap size [${recommended}]: " swap_size
+    read -p "Enter swap size (or press Enter for recommended ${recommended}): " swap_size
 
     # If empty, use recommended
     if [ -z "$swap_size" ]; then
@@ -738,12 +737,11 @@ modify_swap() {
     echo -e "Recommended:     ${GREEN}${recommended}${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo -e "${BLUE}Enter new swap size (or press Enter for recommended ${recommended}):${NC}"
-    echo "Examples: 1G, 2G, 512M"
-    echo "Enter 0 to cancel"
+    echo -e "${BLUE}Configure New Swap Size:${NC}"
+    echo "Examples: 1G, 2G, 512M  |  Enter 0 to cancel"
     echo ""
 
-    read -p "New swap size [${recommended}]: " new_swap_size
+    read -p "Enter new swap size (or press Enter for recommended ${recommended}): " new_swap_size
 
     # If empty, use recommended
     if [ -z "$new_swap_size" ]; then
