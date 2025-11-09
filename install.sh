@@ -582,7 +582,9 @@ create_swap() {
     echo ""
 
     # Confirm creation
-    read -p "Proceed with swap creation? (y/n): " confirm
+    read -p "Proceed with swap creation? (Y/n, or press Enter for yes): " confirm
+    # Default to yes if empty
+    confirm=${confirm:-y}
     if [[ $confirm != "y" && $confirm != "Y" ]]; then
         print_info "Operation cancelled"
         return 0
