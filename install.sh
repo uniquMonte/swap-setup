@@ -394,6 +394,112 @@ get_recommended_cache_pressure() {
 # Swap Management Functions
 #==============================================================================
 
+# Helper function to configure swappiness
+configure_swappiness() {
+    local recommended=$(get_recommended_swappiness)
+    local system_default=60
+
+    echo ""
+    echo -e "${BLUE}Configure Swappiness:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "1) System Default:  ${YELLOW}${system_default}${NC}"
+    echo -e "2) Recommended:     ${GREEN}${recommended}${NC} (optimized for your system)"
+    echo -e "3) Custom:          Specify your own value (0-100)"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    while true; do
+        read -p "Select option [1-3] (or press Enter for recommended): " swappiness_choice
+
+        # Default to recommended if empty
+        if [ -z "$swappiness_choice" ]; then
+            swappiness_choice=2
+        fi
+
+        case $swappiness_choice in
+            1)
+                echo $system_default
+                return 0
+                ;;
+            2)
+                echo $recommended
+                return 0
+                ;;
+            3)
+                echo ""
+                read -p "Enter custom swappiness value (0-100): " custom_swappiness
+
+                # Validate input
+                if [[ $custom_swappiness =~ ^[0-9]+$ ]] && [ $custom_swappiness -ge 0 ] && [ $custom_swappiness -le 100 ]; then
+                    echo $custom_swappiness
+                    return 0
+                else
+                    print_error "Invalid value. Please enter a number between 0 and 100."
+                    echo ""
+                    continue
+                fi
+                ;;
+            *)
+                print_error "Invalid choice. Please select 1, 2, or 3."
+                echo ""
+                ;;
+        esac
+    done
+}
+
+# Helper function to configure cache pressure
+configure_cache_pressure() {
+    local recommended=$(get_recommended_cache_pressure)
+    local system_default=100
+
+    echo ""
+    echo -e "${BLUE}Configure Cache Pressure:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "1) System Default:  ${YELLOW}${system_default}${NC}"
+    echo -e "2) Recommended:     ${GREEN}${recommended}${NC} (optimized for your system)"
+    echo -e "3) Custom:          Specify your own value (typically 0-200)"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    while true; do
+        read -p "Select option [1-3] (or press Enter for recommended): " cache_choice
+
+        # Default to recommended if empty
+        if [ -z "$cache_choice" ]; then
+            cache_choice=2
+        fi
+
+        case $cache_choice in
+            1)
+                echo $system_default
+                return 0
+                ;;
+            2)
+                echo $recommended
+                return 0
+                ;;
+            3)
+                echo ""
+                read -p "Enter custom cache pressure value (typically 0-200): " custom_cache
+
+                # Validate input (allow 0-1000 range, though typical is 0-200)
+                if [[ $custom_cache =~ ^[0-9]+$ ]] && [ $custom_cache -ge 0 ] && [ $custom_cache -le 1000 ]; then
+                    echo $custom_cache
+                    return 0
+                else
+                    print_error "Invalid value. Please enter a positive number (typically 0-200)."
+                    echo ""
+                    continue
+                fi
+                ;;
+            *)
+                print_error "Invalid choice. Please select 1, 2, or 3."
+                echo ""
+                ;;
+        esac
+    done
+}
+
 # Create swap
 create_swap() {
     # Get system information
@@ -440,6 +546,31 @@ create_swap() {
         fi
     fi
 
+    # Configure swappiness
+    local swappiness=$(configure_swappiness)
+    print_success "Swappiness configured: $swappiness"
+
+    # Configure cache pressure
+    local cache_pressure=$(configure_cache_pressure)
+    print_success "Cache pressure configured: $cache_pressure"
+
+    # Display configuration summary
+    echo ""
+    echo -e "${BLUE}Configuration Summary:${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "Swap Size:       ${GREEN}${swap_size}${NC}"
+    echo -e "Swappiness:      ${GREEN}${swappiness}${NC}"
+    echo -e "Cache Pressure:  ${GREEN}${cache_pressure}${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Confirm creation
+    read -p "Proceed with swap creation? (y/n): " confirm
+    if [[ $confirm != "y" && $confirm != "Y" ]]; then
+        print_info "Operation cancelled"
+        return 0
+    fi
+
     # Check if swap already exists
     if [ -f "$SWAP_FILE" ]; then
         print_warning "Swap file already exists at $SWAP_FILE"
@@ -455,6 +586,7 @@ create_swap() {
     local available=$(check_disk_space)
     local required=$(echo $swap_size | sed 's/G//' | sed 's/M//')
 
+    echo ""
     print_info "Creating ${swap_size} swap file..."
     echo ""
 
@@ -490,14 +622,8 @@ create_swap() {
         echo "$SWAP_FILE none swap sw 0 0" >> /etc/fstab
     fi
 
-    # Optimize swap settings
-    print_info "Optimizing swap settings..."
-
-    # Get optimal swappiness for this system
-    local swappiness=$(get_recommended_swappiness)
-
-    # Get optimal cache pressure for this system
-    local cache_pressure=$(get_recommended_cache_pressure)
+    # Apply configured swap settings
+    print_info "Applying swap settings..."
 
     # Set swappiness (how aggressively the kernel swaps)
     if ! grep -q "vm.swappiness" /etc/sysctl.conf; then
@@ -516,7 +642,7 @@ create_swap() {
     # Apply settings
     sysctl -p > /dev/null 2>&1
 
-    print_info "Swappiness set to $swappiness, Cache pressure set to $cache_pressure (optimized for ${ram_display} RAM)"
+    print_success "Swap settings applied: Swappiness=$swappiness, Cache Pressure=$cache_pressure"
 
     echo ""
     print_success "Swap space created successfully!"
