@@ -48,6 +48,18 @@ print_info() {
     echo -e "${BLUE}ℹ $1${NC}"
 }
 
+# Convert size notation (1G, 512M) to MB count
+convert_size_to_mb() {
+    local size=$1
+    if [[ $size == *G ]]; then
+        echo $((${size%G} * 1024))
+    elif [[ $size == *M ]]; then
+        echo ${size%M}
+    else
+        echo $size
+    fi
+}
+
 # Check if running as root
 check_root() {
     if [[ $EUID -ne 0 ]]; then
@@ -91,7 +103,7 @@ show_swap_config() {
     if [ $ram_mb -lt 1024 ]; then
         ram_display="${ram_mb} MB"
     else
-        local ram_gb=$(echo "scale=1; $ram_mb / 1024" | bc)
+        local ram_gb=$(awk "BEGIN {printf \"%.1f\", $ram_mb/1024}")
         ram_display="${ram_gb} GB"
     fi
 
@@ -530,7 +542,7 @@ create_swap() {
     if [ $ram_mb -lt 1024 ]; then
         ram_display="${ram_mb} MB"
     else
-        local ram_gb=$(echo "scale=1; $ram_mb / 1024" | bc)
+        local ram_gb=$(awk "BEGIN {printf \"%.1f\", $ram_mb/1024}")
         ram_display="${ram_gb} GB"
     fi
 
@@ -610,7 +622,7 @@ create_swap() {
     echo ""
 
     # Create swap file
-    if ! dd if=/dev/zero of=$SWAP_FILE bs=1M count=$(echo $swap_size | sed 's/G/*1024/' | sed 's/M//' | bc) status=progress 2>/dev/null; then
+    if ! dd if=/dev/zero of=$SWAP_FILE bs=1M count=$(convert_size_to_mb $swap_size) status=progress 2>/dev/null; then
         print_error "Failed to create swap file"
         return 1
     fi
@@ -721,7 +733,7 @@ modify_swap() {
     if [ $ram_mb -lt 1024 ]; then
         ram_display="${ram_mb} MB"
     else
-        local ram_gb=$(echo "scale=1; $ram_mb / 1024" | bc)
+        local ram_gb=$(awk "BEGIN {printf \"%.1f\", $ram_mb/1024}")
         ram_display="${ram_gb} GB"
     fi
 
@@ -792,7 +804,7 @@ modify_swap() {
     rm -f $SWAP_FILE
 
     print_info "Step 3/5: Creating new ${new_swap_size} swap file..."
-    if ! dd if=/dev/zero of=$SWAP_FILE bs=1M count=$(echo $new_swap_size | sed 's/G/*1024/' | sed 's/M//' | bc) status=progress 2>/dev/null; then
+    if ! dd if=/dev/zero of=$SWAP_FILE bs=1M count=$(convert_size_to_mb $new_swap_size) status=progress 2>/dev/null; then
         print_error "Failed to create new swap file"
         return 1
     fi
